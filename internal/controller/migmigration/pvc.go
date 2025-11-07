@@ -1,9 +1,5 @@
 package migmigration
 
-import (
-	"context"
-)
-
 // PVCNameMapping is a mapping for source -> destination pvc names
 // used for convenience to avoid nested lookups to find migrated PVC names
 // type pvcNameMapping map[string]string
@@ -37,23 +33,23 @@ import (
 // swapPVCReferences for storage conversion migrations, this method
 // swaps the existing PVC references on workload resources with the
 // new pvcs created during storage migration
-func (t *Task) swapPVCReferences(ctx context.Context) (reasons []string, err error) {
-	// build a mapping of source to destination pvc names to avoid nested loops
-	// mapping := t.getPVCNameMapping()
-	// failedVirtualMachineSwaps := t.swapVirtualMachinePVCRefs(ctx, t.Client, mapping)
-	// if len(failedVirtualMachineSwaps) > 0 {
-	// 	reasons = append(reasons,
-	// 		fmt.Sprintf("Failed updating PVC references on VirtualMachines [%s]", strings.Join(failedVirtualMachineSwaps, ",")))
-	// }
+// func (t *Task) swapPVCReferences(ctx context.Context) (reasons []string, err error) {
+// build a mapping of source to destination pvc names to avoid nested loops
+// mapping := t.getPVCNameMapping()
+// failedVirtualMachineSwaps := t.swapVirtualMachinePVCRefs(ctx, t.Client, mapping)
+// if len(failedVirtualMachineSwaps) > 0 {
+// 	reasons = append(reasons,
+// 		fmt.Sprintf("Failed updating PVC references on VirtualMachines [%s]", strings.Join(failedVirtualMachineSwaps, ",")))
+// }
 
-	// failedHandleSourceLabels := t.handleSourceLabels(t.Client, mapping)
-	// if len(failedHandleSourceLabels) > 0 {
-	// 	reasons = append(reasons,
-	// 		fmt.Sprintf("Failed updating labels on source PVCs [%s]", strings.Join(failedHandleSourceLabels, ",")))
-	// }
+// failedHandleSourceLabels := t.handleSourceLabels(t.Client, mapping)
+// if len(failedHandleSourceLabels) > 0 {
+// 	reasons = append(reasons,
+// 		fmt.Sprintf("Failed updating labels on source PVCs [%s]", strings.Join(failedHandleSourceLabels, ",")))
+// }
 
-	return
-}
+// return
+// }
 
 // func (t *Task) handleSourceLabels(client k8sclient.Client, mapping pvcNameMapping) (failedPVCs []string) {
 // 	list := corev1.PersistentVolumeClaimList{}

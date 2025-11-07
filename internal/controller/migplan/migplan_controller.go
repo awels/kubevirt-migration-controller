@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/record"
 
@@ -30,11 +31,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	virtv1 "kubevirt.io/api/core/v1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
+)
+
+const (
+	vmIndexKey = "spec.virtualMachines.name"
 )
 
 // MigPlanReconciler reconciles a MigPlan object
@@ -63,8 +70,10 @@ type MigPlanReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *MigPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	log.V(5).Info("Reconciling MigPlan", "name", req.NamespacedName)
 	// Fetch the MigPlan instance
-	plan := &migrationsv1alpha1.MigPlan{}
+	plan := &migrations.MigPlan{}
 	err := r.Get(context.TODO(), req.NamespacedName, plan)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -83,15 +92,34 @@ func (r *MigPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Validations.
 	if err := r.validate(ctx, plan); err != nil {
+		log.Error(err, "Failed to validate MigPlan")
 		plan.Status.SetReconcileFailed(err)
 	}
 
+	if plan.Status.HasCriticalCondition() {
+		plan.Status.SetCondition(migrations.Condition{
+			Type:     migrations.Ready,
+			Status:   migrations.False,
+			Category: migrations.Required,
+			Message:  "plan has one or more critical conditions",
+		})
+	} else {
+		plan.Status.SetCondition(migrations.Condition{
+			Type:     migrations.Ready,
+			Status:   migrations.True,
+			Category: migrations.Required,
+			Message:  "plan is ready",
+		})
+	}
+
 	if !reflect.DeepEqual(plan.Status, planCopy.Status) {
+		log.V(5).Info("Updating MigPlan status")
 		if err := r.Status().Update(context.TODO(), plan); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
+	log.V(5).Info("Reconciling MigPlan completed")
 	return ctrl.Result{}, nil
 }
 
@@ -104,12 +132,12 @@ func (r *MigPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch for changes to MigPlan
-	if err := c.Watch(source.Kind(mgr.GetCache(), &migrationsv1alpha1.MigPlan{},
-		&handler.TypedEnqueueRequestForObject[*migrationsv1alpha1.MigPlan]{},
-		predicate.TypedFuncs[*migrationsv1alpha1.MigPlan]{
-			CreateFunc: func(e event.TypedCreateEvent[*migrationsv1alpha1.MigPlan]) bool { return true },
-			DeleteFunc: func(e event.TypedDeleteEvent[*migrationsv1alpha1.MigPlan]) bool { return true },
-			UpdateFunc: func(e event.TypedUpdateEvent[*migrationsv1alpha1.MigPlan]) bool {
+	if err := c.Watch(source.Kind(mgr.GetCache(), &migrations.MigPlan{},
+		&handler.TypedEnqueueRequestForObject[*migrations.MigPlan]{},
+		predicate.TypedFuncs[*migrations.MigPlan]{
+			CreateFunc: func(e event.TypedCreateEvent[*migrations.MigPlan]) bool { return true },
+			DeleteFunc: func(e event.TypedDeleteEvent[*migrations.MigPlan]) bool { return true },
+			UpdateFunc: func(e event.TypedUpdateEvent[*migrations.MigPlan]) bool {
 				return !reflect.DeepEqual(e.ObjectOld.Spec, e.ObjectNew.Spec) ||
 					!reflect.DeepEqual(e.ObjectOld.DeletionTimestamp, e.ObjectNew.DeletionTimestamp)
 			},
@@ -118,6 +146,46 @@ func (r *MigPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Index the vmIndexKey field on MigPlans
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &migrations.MigPlan{}, vmIndexKey, func(rawObj client.Object) []string {
+		migplan := rawObj.(*migrations.MigPlan)
+		vmNames := []string{}
+		for _, vm := range migplan.Spec.VirtualMachines {
+			vmNames = append(vmNames, vm.Name)
+		}
+		// The indexer stores an entry for each value in the returned slice
+		return vmNames
+	}); err != nil {
+		return err
+	}
+
+	// Watch for changes to VMs
+	if err := c.Watch(source.Kind(mgr.GetCache(), &virtv1.VirtualMachine{},
+		// Map function that enqueues requests for MigPlans that have the VM in their spec
+		handler.TypedEnqueueRequestsFromMapFunc[*virtv1.VirtualMachine, reconcile.Request](r.getMigPlansForVM),
+		predicate.TypedFuncs[*virtv1.VirtualMachine]{
+			CreateFunc: func(e event.TypedCreateEvent[*virtv1.VirtualMachine]) bool { return true },
+			DeleteFunc: func(e event.TypedDeleteEvent[*virtv1.VirtualMachine]) bool { return true },
+			UpdateFunc: func(e event.TypedUpdateEvent[*virtv1.VirtualMachine]) bool { return true },
+		},
+	)); err != nil {
+		return err
+	}
 	// Watch for changes to MigMigrations
 	return nil
+}
+
+func (r *MigPlanReconciler) getMigPlansForVM(ctx context.Context, vm *virtv1.VirtualMachine) []reconcile.Request {
+	log := logf.FromContext(ctx)
+	log.Info("Getting MigPlans for VM", "name", vm.Name)
+	migplans := &migrations.MigPlanList{}
+	requests := []reconcile.Request{}
+	if err := r.List(ctx, migplans, client.MatchingFields{vmIndexKey: vm.Name}); err != nil {
+		return nil
+	}
+	for _, migplan := range migplans.Items {
+		log.Info("Adding MigPlan to requests", "name", migplan.Name)
+		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Name: migplan.Name, Namespace: migplan.Namespace}})
+	}
+	return requests
 }

@@ -1,9 +1,0 @@
-apiVersion: migrations.kubevirt.io/v1alpha1
-kind: MigCluster
-metadata:
-  labels:
-    app.kubernetes.io/name: kubevirt-migration-controller
-    app.kubernetes.io/managed-by: kustomize
-  name: migcluster-sample
-spec:
-  # TODO(user): Add fields here

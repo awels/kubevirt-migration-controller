@@ -4,34 +4,64 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	storagev1 "k8s.io/api/storage/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
+)
+
+const (
+	defaultK8sStorageClass  = "storageclass.kubernetes.io/is-default-class"
+	defaultVirtStorageClass = "storageclass.kubevirt.io/is-default-virt-class"
 )
 
 // Get a referenced MigPlan.
 // Returns `nil` when the reference cannot be resolved.
-func GetPlan(client k8sclient.Client, ref *corev1.ObjectReference) (*migrationsv1alpha1.MigPlan, error) {
+func GetPlan(ctx context.Context, client k8sclient.Client, ref *corev1.ObjectReference) (*migrations.MigPlan, error) {
 	if ref == nil {
 		return nil, nil
 	}
-	object := migrationsv1alpha1.MigPlan{}
-	err := client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Namespace: ref.Namespace,
-			Name:      ref.Name,
-		},
-		&object)
-	if err != nil {
-		if errors.IsNotFound(err) {
+	migPlan := &migrations.MigPlan{}
+
+	if err := client.Get(ctx, types.NamespacedName{Namespace: ref.Namespace, Name: ref.Name}, migPlan); err != nil {
+		if k8serrors.IsNotFound(err) {
 			return nil, nil
-		} else {
-			return nil, err
+		}
+		return nil, err
+	}
+	return migPlan, nil
+}
+
+func GetDefaultStorageClass(ctx context.Context, client k8sclient.Client) (*string, error) {
+	scList := &storagev1.StorageClassList{}
+	if err := client.List(ctx, scList); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	for _, sc := range scList.Items {
+		if sc.Annotations != nil && sc.Annotations[defaultK8sStorageClass] == "true" {
+			return &sc.Name, nil
 		}
 	}
+	return nil, nil
+}
 
-	return &object, err
+func GetDefaultVirtStorageClass(ctx context.Context, client k8sclient.Client) (*string, error) {
+	scList := &storagev1.StorageClassList{}
+	if err := client.List(ctx, scList); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	for _, sc := range scList.Items {
+		if sc.Annotations != nil && sc.Annotations[defaultVirtStorageClass] == "true" {
+			return &sc.Name, nil
+		}
+	}
+	return nil, nil
 }

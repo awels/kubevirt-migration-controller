@@ -20,6 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	MigPlanKind = "MigPlan"
+)
+
 // MigPlanSpec defines the desired state of MigPlan
 type MigPlanSpec struct {
 	// The virtual machines to migrate.
@@ -32,9 +36,12 @@ type MigPlanVirtualMachine struct {
 }
 
 type MigPlanMigrationPVC struct {
-	SourceName     string                `json:"name"`
+	VolumeName     string                `json:"volumeName"`
 	DestinationPVC MigPlanDestinationPVC `json:"destinationPVC"`
 }
+
+// +kubebuilder:validation:Enum=ReadWriteOnce;ReadOnlyMany;ReadWriteMany;Auto
+type MigPlanAccessMode string
 
 type MigPlanDestinationPVC struct {
 	Name string `json:"name"`
@@ -42,9 +49,8 @@ type MigPlanDestinationPVC struct {
 	// The target storage class to use for the PVC. If not provided, the PVC will use the default storage class.
 	StorageClass string `json:"storageClass,omitempty"`
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=ReadWriteOnce;ReadOnlyMany;ReadWriteMany;Auto
 	// The access modes to use for the PVC, if set to Auto, the access mode will be looked up from the storage class storage profile.
-	AccessModes []string `json:"accessModes"`
+	AccessModes []MigPlanAccessMode `json:"accessModes"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=Filesystem;Block;Auto
 	// The volume mode to use for the PVC, if set to Auto, the volume mode will be looked up from the storage class storage profile. If empty, it will be set to filesystem.
@@ -53,6 +59,10 @@ type MigPlanDestinationPVC struct {
 
 // MigPlanStatus defines the observed state of MigPlan
 type MigPlanStatus struct {
+	// Ready migrations are migrations that are ready to be started.
+	ReadyMigrations []MigPlanVirtualMachine `json:"readyMigrations,omitempty"`
+	// InProgress migrations are migrations that are in progress.
+	InProgressMigrations []MigPlanVirtualMachine `json:"inProgressMigrations,omitempty"`
 	// The migrations that have been completed.
 	CompletedMigrations []MigPlanVirtualMachine `json:"completedMigrations,omitempty"`
 	// The migrations that have failed.
@@ -77,6 +87,7 @@ func (r *MigPlan) GetSuffix() string {
 // +kubebuilder:subresource:status
 
 // MigPlan is the Schema for the migplans API
+// +genclient
 // +k8s:openapi-gen=true
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
