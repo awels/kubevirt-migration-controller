@@ -114,8 +114,6 @@ spec:
                   properties:
                     category:
                       type: string
-                    durable:
-                      type: boolean
                     lastTransitionTime:
                       format: date-time
                       type: string

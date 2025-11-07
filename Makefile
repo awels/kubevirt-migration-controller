@@ -102,11 +102,21 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./api/..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./api/..."
+
+.PHONY: generate-client
+generate-client: client-gen ## Generate client code.
+	$(CLIENT_GEN) --clientset-name versioned \
+	--input-base kubevirt.io/kubevirt-migration-controller/api/ \
+	--output-dir pkg/client/clientset \
+	--fake-clientset=false \
+	--output-pkg kubevirt.io/kubevirt-migration-controller/pkg/client/clientset \
+	--go-header-file hack/boilerplate.go.txt \
+	--input  migrationcontroller/v1alpha1
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -126,7 +136,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	go test ./test/e2e/ -v -ginkgo.v --kubectl-path=$(KUBECTL_PATH)
+	go test ./test/e2e/ -v -ginkgo.v --kubectl-path=$(KUBECTL_PATH) --test-kubeconfig=$(KUBECONFIG) --kubeurl=$(KUBEURL)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -217,15 +227,20 @@ $(LOCALBIN):
 
 ## Tool Binaries
 KUBECTL ?= ./cluster-up/kubectl.sh
+KUBECONFIG ?= $(PWD)/_ci-configs/$(KUBEVIRT_PROVIDER)/.kubeconfig
+KUBEURL ?= ""
 KIND ?= kind
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+CLIENT_GEN ?= $(LOCALBIN)/client-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
+CLIENT_GEN_VERSION ?= v0.34.1
+
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
@@ -241,6 +256,11 @@ $(KUSTOMIZE): $(LOCALBIN)
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+.PHONY: client-gen
+client-gen: $(CLIENT_GEN) ## Download client-gen locally if necessary.
+$(CLIENT_GEN): $(LOCALBIN)
+	$(call go-install-tool,$(CLIENT_GEN),k8s.io/code-generator/cmd/client-gen,$(CLIENT_GEN_VERSION))
 
 .PHONY: setup-envtest
 setup-envtest: envtest ## Download the binaries required for ENVTEST in the local bin directory.

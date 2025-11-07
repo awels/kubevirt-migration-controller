@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	virtv1 "kubevirt.io/api/core/v1"
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -58,7 +58,7 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	var err error
-	err = migrationsv1alpha1.AddToScheme(scheme.Scheme)
+	err = migrations.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = virtv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())

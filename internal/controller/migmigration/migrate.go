@@ -23,11 +23,11 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 )
 
 // Perform the migration.
-func (r *MigMigrationReconciler) migrate(ctx context.Context, plan *migrationsv1alpha1.MigPlan, migration *migrationsv1alpha1.MigMigration) (time.Duration, error) {
+func (r *MigMigrationReconciler) migrate(ctx context.Context, plan *migrations.MigPlan, migration *migrations.MigMigration) (time.Duration, error) {
 	log := logf.FromContext(ctx)
 
 	// Run

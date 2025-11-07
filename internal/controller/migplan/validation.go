@@ -7,84 +7,34 @@ import (
 	"strconv"
 	"strings"
 
+	storagev1 "k8s.io/api/storage/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	virtv1 "kubevirt.io/api/core/v1"
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
+	componenthelpers "kubevirt.io/kubevirt-migration-controller/pkg/component-helpers"
 )
 
 // Types
 const (
-	Suspended                                  = "Suspended"
-	InvalidSourceClusterRef                    = "InvalidSourceClusterRef"
-	InvalidDestinationClusterRef               = "InvalidDestinationClusterRef"
-	InvalidStorageRef                          = "InvalidStorageRef"
-	SourceClusterNotReady                      = "SourceClusterNotReady"
-	DestinationClusterNotReady                 = "DestinationClusterNotReady"
-	ClusterVersionMismatch                     = "ClusterVersionMismatch"
-	SourceClusterNoRegistryPath                = "SourceClusterNoRegistryPath"
-	DestinationClusterNoRegistryPath           = "DestinationClusterNoRegistryPath"
-	StorageNotReady                            = "StorageNotReady"
-	StorageClassConversionUnavailable          = "StorageClassConversionUnavailable"
-	NsListEmpty                                = "NamespaceListEmpty"
-	InvalidDestinationCluster                  = "InvalidDestinationCluster"
-	NsNotFoundOnSourceCluster                  = "NamespaceNotFoundOnSourceCluster"
-	NsNotFoundOnDestinationCluster             = "NamespaceNotFoundOnDestinationCluster"
-	NsLimitExceeded                            = "NamespaceLimitExceeded"
-	NsLengthExceeded                           = "NamespaceLengthExceeded"
-	NsNotDNSCompliant                          = "NamespaceNotDNSCompliant"
-	NsHaveNodeSelectors                        = "NamespacesHaveNodeSelectors"
-	DuplicateNsOnSourceCluster                 = "DuplicateNamespaceOnSourceCluster"
-	DuplicateNsOnDestinationCluster            = "DuplicateNamespaceOnDestinationCluster"
-	PodLimitExceeded                           = "PodLimitExceeded"
-	SourceClusterProxySecretMisconfigured      = "SourceClusterProxySecretMisconfigured"
-	DestinationClusterProxySecretMisconfigured = "DestinationClusterProxySecretMisconfigured"
-	PlanConflict                               = "PlanConflict"
-	PvNameConflict                             = "PvNameConflict"
-	PvInvalidAction                            = "PvInvalidAction"
-	PvNoSupportedAction                        = "PvNoSupportedAction"
-	PvInvalidStorageClass                      = "PvInvalidStorageClass"
-	PvInvalidAccessMode                        = "PvInvalidAccessMode"
-	PvNoStorageClassSelection                  = "PvNoStorageClassSelection"
-	PvWarnAccessModeUnavailable                = "PvWarnAccessModeUnavailable"
-	PvInvalidCopyMethod                        = "PvInvalidCopyMethod"
-	PvCapacityAdjustmentRequired               = "PvCapacityAdjustmentRequired"
-	PvUsageAnalysisFailed                      = "PvUsageAnalysisFailed"
-	PvNoCopyMethodSelection                    = "PvNoCopyMethodSelection"
-	PvWarnCopyMethodSnapshot                   = "PvWarnCopyMethodSnapshot"
-	NfsNotAccessible                           = "NfsNotAccessible"
-	NfsAccessCannotBeValidated                 = "NfsAccessCannotBeValidated"
-	PvLimitExceeded                            = "PvLimitExceeded"
-	StorageEnsured                             = "StorageEnsured"
-	RegistriesEnsured                          = "RegistriesEnsured"
-	RegistriesHealthy                          = "RegistriesHealthy"
-	PvsDiscovered                              = "PvsDiscovered"
-	Closed                                     = "Closed"
-	SourcePodsNotHealthy                       = "SourcePodsNotHealthy"
-	GVKsIncompatible                           = "GVKsIncompatible"
-	InvalidHookRef                             = "InvalidHookRef"
-	InvalidResourceList                        = "InvalidResourceList"
-	HookNotReady                               = "HookNotReady"
-	InvalidHookNSName                          = "InvalidHookNSName"
-	InvalidHookSAName                          = "InvalidHookSAName"
-	HookPhaseUnknown                           = "HookPhaseUnknown"
-	HookPhaseDuplicate                         = "HookPhaseDuplicate"
-	IntraClusterMigration                      = "IntraClusterMigration"
-	KubeVirtNotInstalledSourceCluster          = "KubeVirtNotInstalledSourceCluster"
-	KubeVirtVersionNotSupported                = "KubeVirtVersionNotSupported"
-	KubeVirtStorageLiveMigrationNotEnabled     = "KubeVirtStorageLiveMigrationNotEnabled"
-	StorageMigrationNotPossible                = "StorageMigrationNotPossible"
-	StorageLiveMigratable                      = "StorageLiveMigratable"
+	KubeVirtNotInstalledSourceCluster      = "KubeVirtNotInstalledSourceCluster"
+	KubeVirtVersionNotSupported            = "KubeVirtVersionNotSupported"
+	KubeVirtStorageLiveMigrationNotEnabled = "KubeVirtStorageLiveMigrationNotEnabled"
+	StorageMigrationNotPossible            = "StorageMigrationNotPossible"
+	InvalidPVCs                            = "InvalidPVCs"
+	StorageLiveMigratable                  = "StorageLiveMigratable"
 )
 
 // Categories
 const (
-	Advisory = migrationsv1alpha1.Advisory
-	Critical = migrationsv1alpha1.Critical
-	Error    = migrationsv1alpha1.Error
-	Warn     = migrationsv1alpha1.Warn
+	Advisory = migrations.Advisory
+	Critical = migrations.Critical
+	Error    = migrations.Error
+	Warn     = migrations.Warn
 )
 
 // Reasons
@@ -117,8 +67,8 @@ const (
 
 // Statuses
 const (
-	True  = migrationsv1alpha1.True
-	False = migrationsv1alpha1.False
+	True  = migrations.True
+	False = migrations.False
 )
 
 // Valid kubevirt feature gates
@@ -130,7 +80,7 @@ const (
 )
 
 // Validate the plan resource.
-func (r *MigPlanReconciler) validate(ctx context.Context, plan *migrationsv1alpha1.MigPlan) error {
+func (r *MigPlanReconciler) validate(ctx context.Context, plan *migrations.MigPlan) error {
 	if err := r.validateLiveMigrationPossible(ctx, plan); err != nil {
 		return fmt.Errorf("err checking if live migration is possible: %w", err)
 	}
@@ -138,7 +88,7 @@ func (r *MigPlanReconciler) validate(ctx context.Context, plan *migrationsv1alph
 	return nil
 }
 
-func (r *MigPlanReconciler) validateLiveMigrationPossible(ctx context.Context, plan *migrationsv1alpha1.MigPlan) error {
+func (r *MigPlanReconciler) validateLiveMigrationPossible(ctx context.Context, plan *migrations.MigPlan) error {
 	if err := r.validateKubeVirtInstalled(ctx, plan); err != nil {
 		return err
 	}
@@ -148,13 +98,13 @@ func (r *MigPlanReconciler) validateLiveMigrationPossible(ctx context.Context, p
 	return nil
 }
 
-func (r *MigPlanReconciler) validateStorageMigrationPossible(ctx context.Context, plan *migrationsv1alpha1.MigPlan) error {
+func (r *MigPlanReconciler) validateStorageMigrationPossible(ctx context.Context, plan *migrations.MigPlan) error {
 	// Loop over the virtual machines in the plan and validate if the storage migration is possible.
 	for _, vm := range plan.Spec.VirtualMachines {
 		if reason, message, err := r.validateStorageMigrationPossibleForVM(ctx, &vm, plan.Namespace); err != nil {
 			return err
 		} else if message != "" {
-			plan.Status.SetCondition(migrationsv1alpha1.Condition{
+			plan.Status.SetCondition(migrations.Condition{
 				Type:     StorageMigrationNotPossible,
 				Status:   True,
 				Reason:   reason,
@@ -163,16 +113,152 @@ func (r *MigPlanReconciler) validateStorageMigrationPossible(ctx context.Context
 			})
 			return nil
 		}
+		// Check if the PVCs in the migplan match the PVCs in the virtual machine.
+		if reason, message, err := r.validatePVCsMatch(ctx, &vm, plan.Namespace); err != nil {
+			return err
+		} else if message != "" {
+			plan.Status.SetCondition(migrations.Condition{
+				Type:     StorageMigrationNotPossible,
+				Status:   True,
+				Reason:   reason,
+				Category: Critical,
+				Message:  message,
+			})
+			return nil
+		}
+		// Add the virtual machine to the ready migrations if it is not completed.
+		if !r.isVMCompleted(plan, &vm) && !r.isVMInProgress(plan, &vm) && !r.isVMFailed(plan, &vm) {
+			plan.Status.ReadyMigrations = append(plan.Status.ReadyMigrations, vm)
+		}
+	}
+	// Validate the PVCs are valid
+	if reason, message, err := r.validatePVCs(ctx, plan); err != nil {
+		return err
+	} else if message != "" {
+		plan.Status.SetCondition(migrations.Condition{
+			Type:     InvalidPVCs,
+			Status:   True,
+			Reason:   reason,
+			Category: Critical,
+			Message:  message,
+		})
+		return nil
 	}
 	// Remove the storage migration not possible condition for the virtual machine.
 	plan.Status.DeleteCondition(StorageMigrationNotPossible)
 	return nil
 }
 
-func (r *MigPlanReconciler) validateStorageMigrationPossibleForVM(ctx context.Context, planVM *migrationsv1alpha1.MigPlanVirtualMachine, namespace string) (string, string, error) {
+func (r *MigPlanReconciler) isVMCompleted(plan *migrations.MigPlan, vm *migrations.MigPlanVirtualMachine) bool {
+	for _, completedVM := range plan.Status.CompletedMigrations {
+		if completedVM.Name == vm.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *MigPlanReconciler) isVMInProgress(plan *migrations.MigPlan, vm *migrations.MigPlanVirtualMachine) bool {
+	for _, inProgressVM := range plan.Status.InProgressMigrations {
+		if inProgressVM.Name == vm.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *MigPlanReconciler) isVMFailed(plan *migrations.MigPlan, vm *migrations.MigPlanVirtualMachine) bool {
+	for _, failedVM := range plan.Status.FailedMigrations {
+		if failedVM.Name == vm.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *MigPlanReconciler) validatePVCs(ctx context.Context, plan *migrations.MigPlan) (string, string, error) {
+	for _, vm := range plan.Spec.VirtualMachines {
+		for _, pvc := range vm.MigrationPVCs {
+			if pvc.DestinationPVC.StorageClass != "" {
+				// Validate the storage class exists in the cluster
+				if reason, message, err := r.validateStorageClassExists(ctx, pvc.DestinationPVC.StorageClass); err != nil {
+					return "", "", err
+				} else if message != "" {
+					return reason, message, nil
+				}
+			} else {
+				// Validate a default storage class exists in the cluster.
+				if reason, message, err := r.validateDefaultStorageClassExists(ctx); err != nil {
+					return "", "", err
+				} else if message != "" {
+					return reason, message, nil
+				}
+			}
+		}
+	}
+	return "", "", nil
+}
+
+func (r *MigPlanReconciler) validateStorageClassExists(ctx context.Context, storageClass string) (string, string, error) {
+	sc := &storagev1.StorageClass{}
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: storageClass}, sc); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return NotFound, fmt.Sprintf("storage class %s not found", storageClass), nil
+		}
+		return "", "", err
+	}
+	return "", "", nil
+}
+
+func (r *MigPlanReconciler) validateDefaultStorageClassExists(ctx context.Context) (string, string, error) {
+	defaultStorageClass, err := componenthelpers.GetDefaultStorageClass(ctx, r.Client)
+	if err != nil {
+		return "", "", err
+	}
+	if defaultStorageClass != nil {
+		return "", "", nil
+	}
+	virtStorageClass, err := componenthelpers.GetDefaultVirtStorageClass(ctx, r.Client)
+	if err != nil {
+		return "", "", err
+	}
+	if virtStorageClass != nil {
+		return "", "", nil
+	}
+	return NotFound, "no default storage class found", nil
+}
+
+func (r *MigPlanReconciler) validatePVCsMatch(ctx context.Context, migplanVM *migrations.MigPlanVirtualMachine, namespace string) (string, string, error) {
+	vm := virtv1.VirtualMachine{}
+	log := logf.FromContext(ctx)
+	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: migplanVM.Name}, &vm); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return NotFound, "virtual machine not found", nil
+		}
+		return "", "", err
+	}
+
+	vmVolumeMap := make(map[string]virtv1.Volume)
+	for _, volume := range vm.Spec.Template.Spec.Volumes {
+		vmVolumeMap[volume.Name] = volume
+	}
+	for _, volume := range migplanVM.MigrationPVCs {
+		log.Info("Validating volume", "volume", volume.VolumeName)
+		if _, ok := vmVolumeMap[volume.VolumeName]; !ok {
+			return NotFound, fmt.Sprintf("volume %s not found in virtual machine", volume.VolumeName), nil
+		}
+		log.Info("Volume found in virtual machine", "volume", volume.VolumeName)
+	}
+	return "", "", nil
+}
+
+func (r *MigPlanReconciler) validateStorageMigrationPossibleForVM(ctx context.Context, planVM *migrations.MigPlanVirtualMachine, namespace string) (string, string, error) {
 	// Check the conditions for the virtual machine.
 	vm := virtv1.VirtualMachine{}
 	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: planVM.Name}, &vm); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return NotFound, "virtual machine not found", nil
+		}
 		return "", "", err
 	}
 	if !vm.Status.Ready {
@@ -186,7 +272,7 @@ func (r *MigPlanReconciler) validateStorageMigrationPossibleForVM(ctx context.Co
 	return "", "", nil
 }
 
-func (r *MigPlanReconciler) validateKubeVirtInstalled(ctx context.Context, plan *migrationsv1alpha1.MigPlan) error {
+func (r *MigPlanReconciler) validateKubeVirtInstalled(ctx context.Context, plan *migrations.MigPlan) error {
 	log := logf.FromContext(ctx)
 	kubevirtList := &virtv1.KubeVirtList{}
 	if err := r.Client.List(ctx, kubevirtList); err != nil {
@@ -196,7 +282,7 @@ func (r *MigPlanReconciler) validateKubeVirtInstalled(ctx context.Context, plan 
 		return fmt.Errorf("error listing kubevirts: %w", err)
 	}
 	if len(kubevirtList.Items) == 0 || len(kubevirtList.Items) > 1 {
-		plan.Status.SetCondition(migrationsv1alpha1.Condition{
+		plan.Status.SetCondition(migrations.Condition{
 			Type:     KubeVirtNotInstalledSourceCluster,
 			Status:   True,
 			Reason:   NotFound,
@@ -209,7 +295,7 @@ func (r *MigPlanReconciler) validateKubeVirtInstalled(ctx context.Context, plan 
 	operatorVersion := kubevirt.Status.OperatorVersion
 	major, minor, bugfix, err := parseKubeVirtOperatorSemver(operatorVersion)
 	if err != nil {
-		plan.Status.SetCondition(migrationsv1alpha1.Condition{
+		plan.Status.SetCondition(migrations.Condition{
 			Type:     KubeVirtVersionNotSupported,
 			Status:   True,
 			Reason:   NotSupported,
@@ -221,7 +307,7 @@ func (r *MigPlanReconciler) validateKubeVirtInstalled(ctx context.Context, plan 
 	log.V(3).Info("KubeVirt operator version", "major", major, "minor", minor, "bugfix", bugfix)
 	// Check if kubevirt operator version is at least 1.3.0 if live migration is enabled.
 	if major < 1 || (major == 1 && minor < 3) {
-		plan.Status.SetCondition(migrationsv1alpha1.Condition{
+		plan.Status.SetCondition(migrations.Condition{
 			Type:     KubeVirtVersionNotSupported,
 			Status:   True,
 			Reason:   NotSupported,
@@ -235,7 +321,7 @@ func (r *MigPlanReconciler) validateKubeVirtInstalled(ctx context.Context, plan 
 		*kubevirt.Spec.Configuration.VMRolloutStrategy != virtv1.VMRolloutStrategyLiveUpdate ||
 		kubevirt.Spec.Configuration.DeveloperConfiguration == nil ||
 		isStorageLiveMigrationDisabled(&kubevirt, major, minor) {
-		plan.Status.SetCondition(migrationsv1alpha1.Condition{
+		plan.Status.SetCondition(migrations.Condition{
 			Type:     KubeVirtStorageLiveMigrationNotEnabled,
 			Status:   True,
 			Reason:   NotSupported,

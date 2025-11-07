@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 )
 
 // Requeue
@@ -20,18 +20,18 @@ const (
 
 // Get a progress report.
 // Returns: phase, n, total.
-func (r Itinerary) progressReport(phaseName string) (string, int, int) {
-	n := 0
-	total := len(r.Phases)
-	for i, phase := range r.Phases {
-		if string(phase) == phaseName {
-			n = i + 1
-			break
-		}
-	}
+// func (r Itinerary) progressReport(phaseName string) (string, int, int) {
+// 	n := 0
+// 	total := len(r.Phases)
+// 	for i, phase := range r.Phases {
+// 		if string(phase) == phaseName {
+// 			n = i + 1
+// 			break
+// 		}
+// 	}
 
-	return phaseName, n, total
-}
+// 	return phaseName, n, total
+// }
 
 // A task that provides the complete migration workflow.
 // Log - A controller's logger.
@@ -48,8 +48,8 @@ type Task struct {
 	Scheme    *runtime.Scheme
 	Log       logr.Logger
 	Client    k8sclient.Client
-	Owner     *migrationsv1alpha1.MigMigration
-	Plan      *migrationsv1alpha1.MigPlan
+	Owner     *migrations.MigMigration
+	Plan      *migrations.MigPlan
 	Requeue   time.Duration
 	Itinerary *Itinerary
 	Errors    []string
@@ -72,7 +72,7 @@ func (t *Task) Run(ctx context.Context) error {
 	switch Phase(t.Owner.Status.Phase) {
 	case Started:
 		// Set finalizer on migration
-		t.Owner.AddFinalizer(migrationsv1alpha1.MigMigrationFinalizer)
+		t.Owner.AddFinalizer(migrations.MigMigrationFinalizer)
 		t.Owner.Status.Phase = string(BeginLiveMigration)
 	case BeginLiveMigration:
 		// if t.hasDirectVolumes() {
@@ -120,13 +120,12 @@ func (t *Task) Run(ctx context.Context) error {
 	// 	}
 	case Canceled:
 		t.Owner.Status.DeleteCondition(string(Canceling))
-		t.Owner.Status.SetCondition(migrationsv1alpha1.Condition{
+		t.Owner.Status.SetCondition(migrations.Condition{
 			Type:     string(Canceled),
 			Status:   True,
 			Reason:   Cancel,
 			Category: Advisory,
 			Message:  "The migration has been canceled.",
-			Durable:  true,
 		})
 		// if err = t.next(); err != nil {
 		// 	return err
@@ -260,9 +259,9 @@ func (t *Task) init() {
 // }
 
 // Add errors.
-func (t *Task) addErrors(errors []string) {
-	t.Errors = append(t.Errors, errors...)
-}
+// func (t *Task) addErrors(errors []string) {
+// 	t.Errors = append(t.Errors, errors...)
+// }
 
 // Migration UID.
 func (t *Task) UID() string {
@@ -270,9 +269,9 @@ func (t *Task) UID() string {
 }
 
 // Get whether the migration has failed
-func (t *Task) failed() bool {
-	return t.Owner.HasErrors() || t.Owner.Status.HasCondition(migrationsv1alpha1.Failed)
-}
+// func (t *Task) failed() bool {
+// 	return t.Owner.HasErrors() || t.Owner.Status.HasCondition(migrations.Failed)
+// }
 
 // Get whether the migration is cancelled.
 func (t *Task) canceled() bool {

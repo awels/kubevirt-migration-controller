@@ -5,6 +5,8 @@ set -ex
 source ./cluster-up/hack/common.sh
 source ./cluster-up/cluster/${KUBEVIRT_PROVIDER}/provider.sh
 
+CERT_MANAGER_VERSION=${CERT_MANAGER_VERSION:-v1.16.3}
+
 make undeploy || echo "this is fine"
 
 if [[ "$DOCKER_REPO" == "localhost" ]]; then
@@ -25,3 +27,7 @@ else
   MANIFEST_IMG="${DOCKER_REPO}/${IMG}"
 fi
 make deploy MANIFEST_IMG="${MANIFEST_IMG}"
+
+# Install CertManager
+_kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml
+_kubectl wait deployment.apps/cert-manager-webhook --for condition=Available --namespace cert-manager --timeout 5m

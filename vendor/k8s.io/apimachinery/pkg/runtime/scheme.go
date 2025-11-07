@@ -591,9 +591,12 @@ func (s *Scheme) SetVersionPriority(versions ...schema.GroupVersion) error {
 // PrioritizedVersionsForGroup returns versions for a single group in priority order
 func (s *Scheme) PrioritizedVersionsForGroup(group string) []schema.GroupVersion {
 	ret := []schema.GroupVersion{}
+	fmt.Printf("group: %s\n", group)
+	fmt.Printf("versionPriority: %#v\n", s.versionPriority)
 	for _, version := range s.versionPriority[group] {
 		ret = append(ret, schema.GroupVersion{Group: group, Version: version})
 	}
+	fmt.Printf("observedVersions: %#v\n", s.observedVersions)
 	for _, observedVersion := range s.observedVersions {
 		if observedVersion.Group != group {
 			continue

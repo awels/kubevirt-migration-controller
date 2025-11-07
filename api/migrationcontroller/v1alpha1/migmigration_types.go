@@ -22,7 +22,6 @@ import (
 )
 
 const (
-	MigMigrationKind      = "MigMigration"
 	MigMigrationFinalizer = "migmigration.kubevirt.io/finalizer"
 )
 
@@ -44,6 +43,7 @@ type MigMigrationStatus struct {
 
 // MigMigration is the Schema for the migmigrations API
 // +k8s:openapi-gen=true
+// +genclient
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="Plan",type=string,JSONPath=".spec.migPlanRef.name"
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"

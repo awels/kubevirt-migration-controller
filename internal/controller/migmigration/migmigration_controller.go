@@ -18,7 +18,6 @@ package migmigration
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 	componenthelpers "kubevirt.io/kubevirt-migration-controller/pkg/component-helpers"
 )
 
@@ -63,7 +62,7 @@ type MigMigrationReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *MigMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Fetch the MigMigration instance
-	migration := &migrationsv1alpha1.MigMigration{}
+	migration := &migrations.MigMigration{}
 
 	if err := r.Get(context.TODO(), req.NamespacedName, migration); err != nil {
 		if errors.IsNotFound(err) {
@@ -73,9 +72,6 @@ func (r *MigMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	origMigration := migration.DeepCopy()
-
-	// Ensure required labels are present on migmigration
-	r.ensureLabels(migration)
 
 	// Completed.
 	if migration.Status.Phase == string(Completed) {
@@ -88,12 +84,10 @@ func (r *MigMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Owner Reference
-	if err := r.setOwnerReference(ctx, plan, migration); err != nil {
-		return reconcile.Result{}, err
-	}
+	r.setOwnerReference(plan, migration)
 
 	// Validate
-	if err := r.validate(ctx, plan, migration); err != nil {
+	if err := r.validate(plan, migration); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -119,9 +113,9 @@ func (r *MigMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 // Set the owner reference is set to the plan.
-func (r *MigMigrationReconciler) setOwnerReference(ctx context.Context, plan *migrationsv1alpha1.MigPlan, migration *migrationsv1alpha1.MigMigration) error {
+func (r *MigMigrationReconciler) setOwnerReference(plan *migrations.MigPlan, migration *migrations.MigMigration) {
 	if plan == nil {
-		return nil
+		return
 	}
 	for i := range migration.OwnerReferences {
 		ref := &migration.OwnerReferences[i]
@@ -129,7 +123,7 @@ func (r *MigMigrationReconciler) setOwnerReference(ctx context.Context, plan *mi
 			ref.APIVersion = plan.APIVersion
 			ref.Name = plan.Name
 			ref.UID = plan.UID
-			return nil
+			return
 		}
 	}
 	migration.OwnerReferences = append(
@@ -140,52 +134,6 @@ func (r *MigMigrationReconciler) setOwnerReference(ctx context.Context, plan *mi
 			Name:       plan.Name,
 			UID:        plan.UID,
 		})
-
-	return nil
-}
-
-// Ensures that required labels and debug labels are present on migmigration
-func (r *MigMigrationReconciler) ensureLabels(migration *migrationsv1alpha1.MigMigration) {
-	if migration.Labels == nil {
-		migration.Labels = make(map[string]string)
-	}
-
-	// Required labels
-	migration.Labels[migrationsv1alpha1.MigMigrationUIDLabel] = string(migration.UID)
-
-	// Debug labels
-	if migration.Spec.MigPlanRef == nil {
-		return
-	}
-	if value, exists := migration.Labels[migrationsv1alpha1.MigPlanDebugLabel]; exists {
-		if value == migration.Spec.MigPlanRef.Name {
-			return
-		}
-	}
-	migration.Labels[migrationsv1alpha1.MigPlanDebugLabel] = migration.Spec.MigPlanRef.Name
-	return
-}
-
-// Migration has been deleted.
-// Delete the `HasFinalMigration` condition on all other uncompleted migrations.
-func (r *MigMigrationReconciler) deleted() error {
-	migrationList := migrationsv1alpha1.MigMigrationList{}
-	err := r.Client.List(context.TODO(), &migrationList)
-	if err != nil {
-		return err
-	}
-	for _, m := range migrationList.Items {
-		if m.Status.Phase == string(Completed) || !m.Status.HasCondition(HasFinalMigration) {
-			continue
-		}
-		m.Status.DeleteCondition(HasFinalMigration)
-		err := r.Status().Update(context.TODO(), &m)
-		if err != nil {
-			return fmt.Errorf("error in updating migration status with HasFinalMigration: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -197,12 +145,12 @@ func (r *MigMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch for changes to MigMigration
-	if err := c.Watch(source.Kind(mgr.GetCache(), &migrationsv1alpha1.MigMigration{},
-		&handler.TypedEnqueueRequestForObject[*migrationsv1alpha1.MigMigration]{},
-		predicate.TypedFuncs[*migrationsv1alpha1.MigMigration]{
-			CreateFunc: func(e event.TypedCreateEvent[*migrationsv1alpha1.MigMigration]) bool { return true },
-			DeleteFunc: func(e event.TypedDeleteEvent[*migrationsv1alpha1.MigMigration]) bool { return true },
-			UpdateFunc: func(e event.TypedUpdateEvent[*migrationsv1alpha1.MigMigration]) bool {
+	if err := c.Watch(source.Kind(mgr.GetCache(), &migrations.MigMigration{},
+		&handler.TypedEnqueueRequestForObject[*migrations.MigMigration]{},
+		predicate.TypedFuncs[*migrations.MigMigration]{
+			CreateFunc: func(e event.TypedCreateEvent[*migrations.MigMigration]) bool { return true },
+			DeleteFunc: func(e event.TypedDeleteEvent[*migrations.MigMigration]) bool { return true },
+			UpdateFunc: func(e event.TypedUpdateEvent[*migrations.MigMigration]) bool {
 				return !reflect.DeepEqual(e.ObjectOld.Spec, e.ObjectNew.Spec) ||
 					!reflect.DeepEqual(e.ObjectOld.DeletionTimestamp, e.ObjectNew.DeletionTimestamp)
 			},

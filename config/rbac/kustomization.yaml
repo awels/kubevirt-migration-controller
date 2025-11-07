@@ -28,7 +28,4 @@ resources:
 - migplan_admin_role.yaml
 - migplan_editor_role.yaml
 - migplan_viewer_role.yaml
-- migcluster_admin_role.yaml
-- migcluster_editor_role.yaml
-- migcluster_viewer_role.yaml
 

@@ -32,7 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	virtv1 "kubevirt.io/api/core/v1"
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 )
 
 var _ = PDescribe("MigPlan Controller envtests - with minimal real apiserver", func() {
@@ -45,13 +45,13 @@ var _ = PDescribe("MigPlan Controller envtests - with minimal real apiserver", f
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		migplan := &migrationsv1alpha1.MigPlan{}
+		migplan := &migrations.MigPlan{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind MigPlan")
 			err := k8sClient.Get(ctx, typeNamespacedName, migplan)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &migrationsv1alpha1.MigPlan{
+				resource := &migrations.MigPlan{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -64,7 +64,7 @@ var _ = PDescribe("MigPlan Controller envtests - with minimal real apiserver", f
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &migrationsv1alpha1.MigPlan{}
+			resource := &migrations.MigPlan{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -105,7 +105,7 @@ var _ = Describe("MigPlan Controller tests without apiserver", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithObjects().
-				WithStatusSubresource(&migrationsv1alpha1.MigPlan{}).
+				WithStatusSubresource(&migrations.MigPlan{}).
 				Build()
 
 			reconciler = &MigPlanReconciler{
@@ -136,7 +136,7 @@ var _ = Describe("MigPlan Controller tests without apiserver", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				updated := &migrationsv1alpha1.MigPlan{}
+				updated := &migrations.MigPlan{}
 				err = reconciler.Client.Get(ctx, typeNamespacedName, updated)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -189,53 +189,15 @@ var _ = Describe("MigPlan Controller tests without apiserver", func() {
 				},
 			}, "KubeVirtStorageLiveMigrationNotEnabled", "True"),
 		)
-
-		Context("kv installed and appropriate", func() {
-			BeforeEach(func() {
-				kv := &virtv1.KubeVirt{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kv",
-						Namespace: "default",
-					},
-					Spec: virtv1.KubeVirtSpec{
-						Configuration: virtv1.KubeVirtConfiguration{
-							VMRolloutStrategy:      ptr.To(virtv1.VMRolloutStrategyLiveUpdate),
-							DeveloperConfiguration: &virtv1.DeveloperConfiguration{},
-						},
-					},
-					Status: virtv1.KubeVirtStatus{
-						OperatorVersion: "v1.5.0",
-					},
-				}
-				Expect(reconciler.Client.Create(ctx, kv)).To(Succeed())
-			})
-
-			It("should have no conditions when src MigCluster does not exist", func() {
-				// Create a MigPlan referencing a non-existent src MigCluster
-				migPlan := newMigPlan(resourceName)
-				Expect(reconciler.Client.Create(ctx, migPlan)).To(Succeed())
-
-				_, err := reconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated := &migrationsv1alpha1.MigPlan{}
-				err = reconciler.Client.Get(ctx, typeNamespacedName, updated)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(updated.Status.Conditions.List).To(BeEmpty())
-			})
-		})
 	})
 })
 
-func newMigPlan(name string) *migrationsv1alpha1.MigPlan {
-	return &migrationsv1alpha1.MigPlan{
+func newMigPlan(name string) *migrations.MigPlan {
+	return &migrations.MigPlan{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
-		Spec: migrationsv1alpha1.MigPlanSpec{},
+		Spec: migrations.MigPlanSpec{},
 	}
 }

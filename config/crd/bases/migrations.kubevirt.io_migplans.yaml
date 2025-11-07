@@ -59,12 +59,12 @@ spec:
                                 description: The access modes to use for the PVC,
                                   if set to Auto, the access mode will be looked up
                                   from the storage class storage profile.
-                                enum:
-                                - ReadWriteOnce
-                                - ReadOnlyMany
-                                - ReadWriteMany
-                                - Auto
                                 items:
+                                  enum:
+                                  - ReadWriteOnce
+                                  - ReadOnlyMany
+                                  - ReadWriteMany
+                                  - Auto
                                   type: string
                                 type: array
                               name:
@@ -87,11 +87,11 @@ spec:
                             required:
                             - name
                             type: object
-                          name:
+                          volumeName:
                             type: string
                         required:
                         - destinationPVC
-                        - name
+                        - volumeName
                         type: object
                       type: array
                     name:
@@ -120,12 +120,12 @@ spec:
                                 description: The access modes to use for the PVC,
                                   if set to Auto, the access mode will be looked up
                                   from the storage class storage profile.
-                                enum:
-                                - ReadWriteOnce
-                                - ReadOnlyMany
-                                - ReadWriteMany
-                                - Auto
                                 items:
+                                  enum:
+                                  - ReadWriteOnce
+                                  - ReadOnlyMany
+                                  - ReadWriteMany
+                                  - Auto
                                   type: string
                                 type: array
                               name:
@@ -148,11 +148,11 @@ spec:
                             required:
                             - name
                             type: object
-                          name:
+                          volumeName:
                             type: string
                         required:
                         - destinationPVC
-                        - name
+                        - volumeName
                         type: object
                       type: array
                     name:
@@ -176,8 +176,6 @@ spec:
                   properties:
                     category:
                       type: string
-                    durable:
-                      type: boolean
                     lastTransitionTime:
                       format: date-time
                       type: string
@@ -209,12 +207,12 @@ spec:
                                 description: The access modes to use for the PVC,
                                   if set to Auto, the access mode will be looked up
                                   from the storage class storage profile.
-                                enum:
-                                - ReadWriteOnce
-                                - ReadOnlyMany
-                                - ReadWriteMany
-                                - Auto
                                 items:
+                                  enum:
+                                  - ReadWriteOnce
+                                  - ReadOnlyMany
+                                  - ReadWriteMany
+                                  - Auto
                                   type: string
                                 type: array
                               name:
@@ -237,11 +235,66 @@ spec:
                             required:
                             - name
                             type: object
-                          name:
+                          volumeName:
                             type: string
                         required:
                         - destinationPVC
-                        - name
+                        - volumeName
+                        type: object
+                      type: array
+                    name:
+                      type: string
+                  required:
+                  - migrationPVCs
+                  - name
+                  type: object
+                type: array
+              inProgressMigrations:
+                description: InProgress migrations are migrations that are in progress.
+                items:
+                  properties:
+                    migrationPVCs:
+                      items:
+                        properties:
+                          destinationPVC:
+                            properties:
+                              accessModes:
+                                description: The access modes to use for the PVC,
+                                  if set to Auto, the access mode will be looked up
+                                  from the storage class storage profile.
+                                items:
+                                  enum:
+                                  - ReadWriteOnce
+                                  - ReadOnlyMany
+                                  - ReadWriteMany
+                                  - Auto
+                                  type: string
+                                type: array
+                              name:
+                                type: string
+                              storageClass:
+                                description: The target storage class to use for the
+                                  PVC. If not provided, the PVC will use the default
+                                  storage class.
+                                type: string
+                              volumeMode:
+                                description: The volume mode to use for the PVC, if
+                                  set to Auto, the volume mode will be looked up from
+                                  the storage class storage profile. If empty, it
+                                  will be set to filesystem.
+                                enum:
+                                - Filesystem
+                                - Block
+                                - Auto
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          volumeName:
+                            type: string
+                        required:
+                        - destinationPVC
+                        - volumeName
                         type: object
                       type: array
                     name:
@@ -254,6 +307,62 @@ spec:
               phase:
                 description: The current phase of the migration plan.
                 type: string
+              readyMigrations:
+                description: Ready migrations are migrations that are ready to be
+                  started.
+                items:
+                  properties:
+                    migrationPVCs:
+                      items:
+                        properties:
+                          destinationPVC:
+                            properties:
+                              accessModes:
+                                description: The access modes to use for the PVC,
+                                  if set to Auto, the access mode will be looked up
+                                  from the storage class storage profile.
+                                items:
+                                  enum:
+                                  - ReadWriteOnce
+                                  - ReadOnlyMany
+                                  - ReadWriteMany
+                                  - Auto
+                                  type: string
+                                type: array
+                              name:
+                                type: string
+                              storageClass:
+                                description: The target storage class to use for the
+                                  PVC. If not provided, the PVC will use the default
+                                  storage class.
+                                type: string
+                              volumeMode:
+                                description: The volume mode to use for the PVC, if
+                                  set to Auto, the volume mode will be looked up from
+                                  the storage class storage profile. If empty, it
+                                  will be set to filesystem.
+                                enum:
+                                - Filesystem
+                                - Block
+                                - Auto
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          volumeName:
+                            type: string
+                        required:
+                        - destinationPVC
+                        - volumeName
+                        type: object
+                      type: array
+                    name:
+                      type: string
+                  required:
+                  - migrationPVCs
+                  - name
+                  type: object
+                type: array
               suffix:
                 description: The suffix to automatically append to the PVC name.
                 type: string

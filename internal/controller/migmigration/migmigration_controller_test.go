@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 )
 
 var _ = PDescribe("MigMigration Controller", func() {
@@ -40,13 +40,13 @@ var _ = PDescribe("MigMigration Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		migmigration := &migrationsv1alpha1.MigMigration{}
+		migmigration := &migrations.MigMigration{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind MigMigration")
 			err := k8sClient.Get(ctx, typeNamespacedName, migmigration)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &migrationsv1alpha1.MigMigration{
+				resource := &migrations.MigMigration{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,7 +59,7 @@ var _ = PDescribe("MigMigration Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &migrationsv1alpha1.MigMigration{}
+			resource := &migrations.MigMigration{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

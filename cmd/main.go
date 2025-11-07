@@ -39,7 +39,7 @@ import (
 
 	virtv1 "kubevirt.io/api/core/v1"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 	"kubevirt.io/kubevirt-migration-controller/internal/controller/migmigration"
 	"kubevirt.io/kubevirt-migration-controller/internal/controller/migplan"
 	// +kubebuilder:scaffold:imports
@@ -54,7 +54,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(virtv1.AddToScheme(scheme))
 
-	utilruntime.Must(migrationsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(migrations.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

@@ -2,9 +2,6 @@ package v1alpha1
 
 import (
 	"fmt"
-	"reflect"
-	"regexp"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -65,14 +62,10 @@ type Condition struct {
 	Category           string      `json:"category"`
 	Message            string      `json:"message,omitempty"`
 	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
-	Durable            bool        `json:"durable,omitempty"`
-	Items              []string    `json:"-"`
-	staged             bool        `json:"-"`
 }
 
 // Update this condition with another's fields.
 func (r *Condition) Update(other Condition) {
-	r.staged = true
 	if r.Equal(other) {
 		return
 	}
@@ -81,8 +74,6 @@ func (r *Condition) Update(other Condition) {
 	r.Reason = other.Reason
 	r.Category = other.Category
 	r.Message = other.Message
-	r.Durable = other.Durable
-	r.Items = other.Items
 	r.LastTransitionTime = metav1.NewTime(time.Now())
 }
 
@@ -92,31 +83,7 @@ func (r *Condition) Equal(other Condition) bool {
 		r.Status == other.Status &&
 		r.Category == other.Category &&
 		r.Reason == other.Reason &&
-		r.Message == other.Message &&
-		r.Durable == other.Durable &&
-		reflect.DeepEqual(r.Items, other.Items)
-}
-
-// Replace [] in `Message` with the content of `Items`.
-func (r *Condition) ExpandItems() {
-	re := regexp.MustCompile(`\[\]`)
-	list := fmt.Sprintf("[%s]", strings.Join(r.Items, ","))
-	r.Message = re.ReplaceAllString(r.Message, list)
-}
-
-// Build the `Items` list by parsing the `Message`.
-func (r *Condition) BuildItems() {
-	re := regexp.MustCompile(`\[[^]]+\]`)
-	found := re.FindString(r.Message)
-	if found == "" {
-		return
-	}
-	r.Items = []string{}
-	found = strings.Trim(found, "[]")
-	r.Message = re.ReplaceAllString(r.Message, "[]")
-	for _, s := range strings.Split(found, ",") {
-		r.Items = append(r.Items, strings.TrimSpace(s))
-	}
+		r.Message == other.Message
 }
 
 // Managed collection of conditions.
@@ -188,7 +155,6 @@ func (r *Conditions) SetCondition(condition Condition) {
 	if r.List == nil {
 		r.List = []Condition{}
 	}
-	condition.staged = true
 	found := r.find(condition.Type)
 	if found == nil {
 		condition.LastTransitionTime = metav1.NewTime(time.Now().UTC())
@@ -323,8 +289,7 @@ func (r *Conditions) SetReconcileFailed(err error) {
 		Type:     ReconcileFailed,
 		Status:   True,
 		Category: Critical,
-		Message:  "Reconcile failed: []. See controller logs for details.",
-		Items:    []string{err.Error()},
+		Message:  fmt.Sprintf("reconcile failed: %s", err.Error()),
 	})
 }
 

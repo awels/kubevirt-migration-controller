@@ -1,23 +1,22 @@
 package migmigration
 
 import (
-	"context"
 	"fmt"
 	"path"
 
-	migrationsv1alpha1 "kubevirt.io/kubevirt-migration-controller/api/v1alpha1"
+	migrations "kubevirt.io/kubevirt-migration-controller/api/migrationcontroller/v1alpha1"
 )
 
 // Statuses
 const (
-	True  = migrationsv1alpha1.True
-	False = migrationsv1alpha1.False
+	True  = migrations.True
+	False = migrations.False
 )
 
 // Categories
 const (
-	Critical = migrationsv1alpha1.Critical
-	Advisory = migrationsv1alpha1.Advisory
+	Critical = migrations.Critical
+	Advisory = migrations.Advisory
 )
 
 // Reasons
@@ -59,7 +58,7 @@ const (
 )
 
 // Validate the migration resource.
-func (r *MigMigrationReconciler) validate(ctx context.Context, plan *migrationsv1alpha1.MigPlan, migration *migrationsv1alpha1.MigMigration) error {
+func (r *MigMigrationReconciler) validate(plan *migrations.MigPlan, migration *migrations.MigMigration) error {
 	// verify the migration is owned by a plan
 	ownerReference := migration.FindOwnerReference()
 	if ownerReference == nil {
@@ -67,13 +66,13 @@ func (r *MigMigrationReconciler) validate(ctx context.Context, plan *migrationsv
 	} else if ownerReference.UID != migration.Spec.MigPlanRef.UID {
 		return fmt.Errorf("migration is not owned by the plan %s, uid mismatch", migration.Spec.MigPlanRef.Name)
 	}
-	return r.validatePlan(ctx, plan, migration)
+	return r.validatePlan(plan, migration)
 }
 
 // Validate the referenced plan.
-func (r *MigMigrationReconciler) validatePlan(ctx context.Context, plan *migrationsv1alpha1.MigPlan, migration *migrationsv1alpha1.MigMigration) error {
+func (r *MigMigrationReconciler) validatePlan(plan *migrations.MigPlan, migration *migrations.MigMigration) error {
 	if plan == nil {
-		migration.Status.SetCondition(migrationsv1alpha1.Condition{
+		migration.Status.SetCondition(migrations.Condition{
 			Type:     InvalidPlanRef,
 			Status:   True,
 			Reason:   NotFound,
@@ -85,7 +84,7 @@ func (r *MigMigrationReconciler) validatePlan(ctx context.Context, plan *migrati
 	}
 	// Check if the plan has any critical conditions
 	if plan.Status.HasCriticalCondition() {
-		migration.Status.SetCondition(migrationsv1alpha1.Condition{
+		migration.Status.SetCondition(migrations.Condition{
 			Type:     PlanNotReady,
 			Status:   True,
 			Category: Critical,
